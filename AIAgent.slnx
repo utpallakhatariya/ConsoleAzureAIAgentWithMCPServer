@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/Solution Items/" />
+  <Project Path="AIAgent/AIAgent.csproj" />
+  <Project Path="AIChat/AIChat.csproj" Id="3d029b4d-c2f1-49f2-864e-d010a598394a" />
+</Solution>

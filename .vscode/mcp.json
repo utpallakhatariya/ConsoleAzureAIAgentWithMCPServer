@@ -1,0 +1,14 @@
+{
+	"servers": {
+		"AIAgent": {
+			"type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "F:\\VSProjects\\AIProjects\\AIAgentConsole\\AIAgent\\AIAgent\\AIAgent.csproj"
+      ]
+		}
+	},
+	"inputs": []
+}
