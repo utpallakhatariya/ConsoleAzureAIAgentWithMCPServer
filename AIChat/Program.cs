@@ -58,6 +58,8 @@ await using var mcpClient = await McpClient.CreateAsync(transport);
 
 // Discover Addition and Subtraction (and any other available tools).
 var tools = await mcpClient.ListToolsAsync();
+var prompts = await mcpClient.ListPromptsAsync();
+var resources = await mcpClient.ListResourcesAsync();
 
 Console.WriteLine("Azure OpenAI client configured using Azure CLI credentials.");
 Console.WriteLine("Connected to MCP server.");
@@ -66,6 +68,18 @@ Console.WriteLine("\nAvailable tools:");
 foreach (var tool in tools)
 {
     Console.WriteLine($"  {tool.Name}: {tool.Description}");
+}
+
+Console.WriteLine("\nAvailable prompts:");
+foreach (var prompt in prompts)
+{
+    Console.WriteLine($"  {prompt.Name}: {prompt.Description}");
+}
+
+Console.WriteLine("\nAvailable resources:");
+foreach (var resource in resources)
+{
+    Console.WriteLine($"  {resource.Uri}: {resource.Description}");
 }
 
 // Retain the conversation across turns.
@@ -84,6 +98,10 @@ Console.WriteLine(
     "\nCalculator AI is ready. Type 'exit' to quit.");
 Console.WriteLine(
     "Examples: Add 10 and 20 | Subtract 15 from 50");
+Console.WriteLine(
+    "Use '/prompt <question>' to invoke the solve_question prompt.");
+Console.WriteLine(
+    "Use '/resource <question>' to read calculator://guide and use it as context.");
 
 while (true)
 {
@@ -99,10 +117,83 @@ while (true)
     if (string.IsNullOrWhiteSpace(input))
         continue;
 
-    messages.Add(new ChatMessage(ChatRole.User, input));
+    var messageStartIndex = messages.Count;
 
     try
     {
+        if (input.Equals("/prompt", StringComparison.OrdinalIgnoreCase) ||
+            input.StartsWith("/prompt ", StringComparison.OrdinalIgnoreCase))
+        {
+            var question = input["/prompt".Length..].Trim();
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                Console.WriteLine("Usage: /prompt <arithmetic question>");
+                continue;
+            }
+
+            var prompt = await mcpClient.GetPromptAsync(
+                "solve_question",
+                new Dictionary<string, object?>
+                {
+                    ["question"] = question
+                });
+
+            Console.WriteLine(
+                "Invoked MCP prompt 'solve_question'; sending its messages to Azure OpenAI.");
+
+            foreach (var promptMessage in prompt.Messages)
+            {
+                var role = promptMessage.Role == ModelContextProtocol.Protocol.Role.Assistant
+                    ? ChatRole.Assistant
+                    : ChatRole.User;
+
+                if (promptMessage.Content is not ModelContextProtocol.Protocol.TextContentBlock textContent)
+                {
+                    throw new InvalidOperationException(
+                        "The solve_question prompt returned a non-text content block.");
+                }
+
+                messages.Add(new ChatMessage(role, textContent.Text));
+            }
+        }
+        else if (input.Equals("/resource", StringComparison.OrdinalIgnoreCase) ||
+                 input.StartsWith("/resource ", StringComparison.OrdinalIgnoreCase))
+        {
+            var question = input["/resource".Length..].Trim();
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                Console.WriteLine("Usage: /resource <question>");
+                continue;
+            }
+
+            const string resourceUri = "calculator://guide";
+            var resource = await mcpClient.ReadResourceAsync(resourceUri);
+            var resourceText = string.Join(
+                Environment.NewLine,
+                resource.Contents.Select(content =>
+                    content is ModelContextProtocol.Protocol.TextResourceContents textContent
+                        ? textContent.Text
+                        : throw new InvalidOperationException(
+                            $"Resource '{resourceUri}' returned non-text content.")));
+
+            Console.WriteLine(
+                $"Read MCP resource '{resourceUri}'; sending its contents to Azure OpenAI as context.");
+            messages.Add(new ChatMessage(
+                ChatRole.User,
+                $"""
+                Use this MCP resource as reference when answering the request.
+
+                Resource ({resourceUri}):
+                {resourceText}
+
+                Request: {question}
+                """));
+        }
+        else
+        {
+            messages.Add(new ChatMessage(ChatRole.User, input));
+        }
+
         var response = await chatClient.GetResponseAsync(
             messages,
             new ChatOptions
@@ -118,8 +209,7 @@ while (true)
     }
     catch (Exception ex)
     {
-        // Remove the user turn if this request failed.
-        messages.RemoveAt(messages.Count - 1);
+        messages.RemoveRange(messageStartIndex, messages.Count - messageStartIndex);
         Console.WriteLine($"\nError: {ex.Message}");
     }
 }

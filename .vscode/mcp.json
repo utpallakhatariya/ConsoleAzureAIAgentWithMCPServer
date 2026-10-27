@@ -6,7 +6,7 @@
       "args": [
         "run",
         "--project",
-        "F:\\VSProjects\\AIProjects\\AIAgentConsole\\AIAgent\\AIAgent\\AIAgent.csproj"
+        "{aiagent-csproj-path}"
       ]
 		}
 	},

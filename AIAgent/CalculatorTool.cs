@@ -28,5 +28,11 @@ namespace AIAgent
                 return "Error: Division by zero is not allowed.";
             return $"Division of {a} by {b} is {a / b}";
         }
+
+        [McpServerTool, Description("Get multiplication of two numbers.")]
+        public string Multiplication(int a, int b)
+        {
+            return $"Multiplication of {a} and {b} is {a * b}";
+        }
     }
 }
